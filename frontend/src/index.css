@@ -11,6 +11,18 @@
   --premium-gradient: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
 }
 
+[data-theme='light'] {
+  --bg-primary: #f1f5f9;
+  --bg-secondary: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --accent: #0ea5e9;
+  --accent-glow: rgba(14, 165, 233, 0.2);
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --premium-gradient: linear-gradient(135deg, #0ea5e9 0%, #6366f1 100%);
+}
+
 @keyframes gradientBG {
   0% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
@@ -33,35 +45,157 @@ body {
   font-family: 'Outfit', 'Inter', system-ui, sans-serif;
   background-color: var(--bg-primary);
   background-image: 
-    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 100% 100%, rgba(129, 140, 248, 0.15) 0%, transparent 50%),
-    radial-gradient(circle at 50% 50%, rgba(15, 23, 42, 1) 0%, transparent 100%);
+    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 100% 100%, rgba(129, 140, 248, 0.1) 0%, transparent 50%);
   background-attachment: fixed;
   color: var(--text-primary);
   min-height: 100vh;
   overflow-x: hidden;
-  perspective: 1000px;
+  perspective: 1200px;
+  transition: background-color 0.5s ease, color 0.5s ease;
 }
 
 * {
   box-sizing: border-box;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-toggle {
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-primary);
+  padding: 0.75rem;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.1);
 }
 
 .app-container {
-  max-width: 1240px;
-  margin: 0 auto;
-  padding: 3rem 1.5rem;
+  max-width: 1100px;
+  margin-left: 8%;
+  padding: 2rem 1rem;
   animation: fadeInScale 0.8s ease-out;
+  position: relative;
+  z-index: 10;
 }
 
-header {
-  text-align: center;
-  margin-bottom: 4rem;
+/* --- Dynamic Weather Backgrounds (Hyper 3D High Texture) --- */
+.weather-bg-layer {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  transition: opacity 2s ease;
+  background: var(--bg-primary); /* Fallback */
+}
+
+.bg-video {
+  position: absolute;
+  top: 50%; left: 50%;
+  min-width: 100%; min-height: 100%;
+  width: auto; height: auto;
+  transform: translate(-50%, -50%);
+  object-fit: cover;
+  opacity: 0.6; /* Slight tint to keep visibility of UI */
+  transition: opacity 2s ease;
+}
+
+.fx-layer {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 1;
+}
+
+/* 3D Rising Sun Effect - High Texture */
+.rising-sun {
+  position: absolute;
+  bottom: -30vh; right: -15vw;
+  width: 90vw; height: 90vw;
+  background: radial-gradient(circle, 
+    rgba(253, 224, 71, 0.4) 0%, 
+    rgba(251, 191, 36, 0.2) 20%, 
+    rgba(245, 158, 11, 0.1) 40%, 
+    transparent 80%
+  );
+  border-radius: 50%;
+  filter: blur(80px);
+  animation: sunRiseInteractive 15s cubic-bezier(0.16, 1, 0.3, 1) forwards, sunPulseCorona 5s ease-in-out infinite alternate;
+  transform-style: preserve-3d;
+}
+
+@keyframes sunRiseInteractive {
+  from { transform: translateY(50vh) scale(0.4) rotateX(10deg); opacity: 0; }
+  to { transform: translateY(0) scale(1.3) rotateX(0deg); opacity: 1; }
+}
+
+@keyframes sunPulseCorona {
+  from { box-shadow: 0 0 100px rgba(253, 224, 71, 0.2); }
+  to { box-shadow: 0 0 200px rgba(251, 191, 36, 0.4); }
+}
+
+/* High Texture Smoke/Fog Effect */
+.smoke-layer {
+  position: absolute;
+  width: 100%; height: 100%;
+}
+
+.smoke-particle {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.08); /* Higher visibility */
+  filter: blur(40px);
+  border-radius: 40%;
+  box-shadow: 
+    inset 0 0 80px rgba(255,255,255,0.2),
+    20px 20px 60px rgba(0,0,0,0.1);
+  animation: highTextureEvolve 35s linear infinite;
+}
+
+@keyframes highTextureEvolve {
+  0% { transform: scale(1) translate(-10%, 10%) rotate(0deg); opacity: 0; }
+  15% { opacity: 0.6; }
+  85% { opacity: 0.6; }
+  100% { transform: scale(3) translate(50vw, -30vh) rotate(120deg); opacity: 0; }
+}
+/* Rain & Splash Effect - High Texture */
+.rain-container {
+  position: absolute;
+  width: 100%; height: 100%;
+}
+
+.drop {
+  position: absolute;
+  background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0.4));
+  width: 1.5px; height: 100px;
+  top: -100px;
+  animation: rainDrop 0.8s linear infinite;
+}
+
+.splash {
+  position: absolute;
+  border: 1px solid rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.1);
+  border-radius: 50%;
+  animation: splashEffect 0.6s ease-out forwards;
+}
+
+@keyframes splashEffect {
+  0% { transform: scale(0); opacity: 0.8; filter: blur(0); }
+  100% { transform: scale(3); opacity: 0; filter: blur(4px); }
+}
+
+@keyframes rainDrop {
+  to { transform: translateY(110vh); }
 }
 
 header h1 {
-  font-size: 3.5rem;
+  font-size: 2.8rem;
   font-weight: 800;
   letter-spacing: -0.02em;
   background: var(--premium-gradient);
@@ -161,16 +295,22 @@ input:focus, select:focus {
 
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1.5rem;
-  margin-top: 2.5rem;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+@media (max-width: 1200px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .metric-card {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--glass-border);
-  border-radius: 20px;
-  padding: 2rem 1.5rem;
+  border-radius: 18px;
+  padding: 1.25rem 1rem;
   text-align: center;
   position: relative;
   overflow: hidden;
@@ -196,13 +336,13 @@ input:focus, select:focus {
 }
 
 .metric-card .value {
-  font-size: 1.8rem;
-  font-weight: 800;
-  margin-bottom: 0.25rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin-bottom: 0.15rem;
 }
 
 .metric-card .label {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
   font-weight: 500;
 }
@@ -211,35 +351,35 @@ input:focus, select:focus {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 3rem;
-  padding: 1rem;
+  margin-bottom: 2rem;
+  padding: 0.5rem;
 }
 
 .temp-large {
-  font-size: 5.5rem;
+  font-size: 3.5rem;
   font-weight: 800;
   background: linear-gradient(to bottom, #fff, #94a3b8);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  line-height: 1;
+  line-height: 1.1;
 }
 
 .condition-large {
-  font-size: 2rem;
+  font-size: 1.4rem;
   color: var(--text-secondary);
   font-weight: 500;
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
 }
-
+ 
 .weather-icon-large {
-  width: 140px;
-  height: 140px;
+  width: 90px;
+  height: 90px;
   color: var(--accent);
   animation: float 4s ease-in-out infinite;
-  filter: drop-shadow(0 0 30px var(--accent-glow));
+  filter: drop-shadow(0 0 20px var(--accent-glow));
 }
 
 .tabs {
@@ -284,10 +424,10 @@ input:focus, select:focus {
 }
 
 .hourly-card {
-  min-width: 120px;
-  padding: 1.5rem;
+  min-width: 110px;
+  padding: 1rem;
   background: rgba(255, 255, 255, 0.04);
-  border-radius: 18px;
+  border-radius: 16px;
   border: 1px solid var(--glass-border);
 }
 
@@ -311,11 +451,30 @@ input:focus, select:focus {
 }
 
 .trend-badge {
-  padding: 0.5rem 1rem;
-  border-radius: 12px;
-  font-weight: 700;
-  font-size: 0.85rem;
+  padding: 0.5rem 0.8rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.trend-label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.trend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .trend-up {
@@ -328,6 +487,10 @@ input:focus, select:focus {
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
   border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.seasonal-card {
+  padding: 1.5rem !important;
 }
 
 ::-webkit-scrollbar {

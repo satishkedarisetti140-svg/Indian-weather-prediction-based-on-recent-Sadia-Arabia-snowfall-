@@ -3,7 +3,7 @@ import axios from 'axios';
 import { 
   CloudSun, CloudRain, CloudLightning, Sun, Wind, Droplets, 
   Thermometer, Activity, MapPin, Calendar, CheckCircle2, ChevronDown,
-  TrendingUp, TrendingDown, Snowflake, CloudDrizzle
+  TrendingUp, TrendingDown, Snowflake, CloudDrizzle, Moon
 } from 'lucide-react';
 import {
   Chart as ChartJS,
@@ -26,6 +26,99 @@ ChartJS.register(
 
 const API_URL = import.meta.env.PROD ? "/api" : "http://localhost:8001/api";
 
+const WeatherBackground = ({ condition }) => {
+  if (!condition) return <div className="weather-bg-layer" />;
+  
+  const cond = condition.toLowerCase();
+  const isSunny = cond.includes('sun') || cond.includes('clear');
+  const isRainy = cond.includes('rain') || cond.includes('thunder') || cond.includes('drizzle');
+  const isCloudy = cond.includes('cloud') || cond.includes('overcast');
+
+  // Determine video source
+  let videoSrc = "";
+  if (isSunny) videoSrc = "/videos/sunny.mp4";
+  else if (isRainy) videoSrc = "/videos/rainy.mp4";
+  else if (isCloudy) videoSrc = "/videos/cloudy.mp4";
+
+  return (
+    <div className="weather-bg-layer">
+      {videoSrc && (
+        <video 
+          key={videoSrc}
+          autoPlay 
+          loop 
+          muted 
+          playsInline
+          className="bg-video"
+        >
+          <source src={videoSrc} type="video/mp4" />
+        </video>
+      )}
+
+      {/* Layered 3D FX on top of video */}
+      <div className="fx-layer">
+        {isSunny && (
+          <>
+            <div className="rising-sun" />
+            <div className="rising-sun" style={{ width: '60vw', height: '60vw', opacity: 0.3, filter: 'blur(40px)' }} />
+          </>
+        )}
+        
+        {isRainy && (
+          <div className="rain-container">
+            {[...Array(30)].map((_, i) => (
+              <div 
+                key={`drop-${i}`} 
+                className="drop" 
+                style={{
+                  left: `${Math.random() * 100}%`,
+                  animationDelay: `${Math.random() * 2}s`,
+                  animationDuration: `${0.3 + Math.random() * 0.4}s`,
+                  opacity: 0.15
+                }} 
+              />
+            ))}
+            {[...Array(15)].map((_, i) => (
+              <div 
+                key={`splash-${i}`} 
+                className="splash" 
+                style={{
+                  top: `${Math.random() * 100}vh`,
+                  left: `${Math.random() * 100}vw`,
+                  width: `${15 + Math.random() * 20}px`,
+                  height: `${15 + Math.random() * 20}px`,
+                  animationDelay: `${Math.random() * 8}s`,
+                  animationDuration: `${0.4 + Math.random() * 0.6}s`
+                }} 
+              />
+            ))}
+          </div>
+        )}
+
+        {isCloudy && (
+          <div className="smoke-layer">
+            {[...Array(8)].map((_, i) => (
+              <div 
+                key={`smoke-${i}`} 
+                className="smoke-particle" 
+                style={{
+                  top: `${Math.random() * 120 - 10}%`,
+                  left: `${Math.random() * 120 - 10}%`,
+                  width: `${400 + Math.random() * 600}px`,
+                  height: `${300 + Math.random() * 500}px`,
+                  animationDelay: `${Math.random() * 20}s`,
+                  animationDuration: `${25 + Math.random() * 30}s`,
+                  opacity: 0.2
+                }} 
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 function App() {
   const [activeTab, setActiveTab] = useState('forecast'); // 'forecast' | 'model'
   
@@ -39,6 +132,11 @@ function App() {
   const [seasonalTrends, setSeasonalTrends] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [theme, setTheme] = useState('dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     // Fetch locations
@@ -358,7 +456,17 @@ function App() {
   };
 
   return (
-    <div className="app-container">
+    <div className="app">
+      <button 
+        className="theme-toggle" 
+        onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        title="Toggle Theme"
+      >
+        {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+      </button>
+
+      <WeatherBackground condition={weatherData?.summary?.condition} />
+      <div className="app-container">
       <header>
         <h1>Indian Weather Predictor</h1>
         <p>AI Predictions based on Saudi Arabia Atmospheric Patterns</p>
@@ -454,7 +562,8 @@ function App() {
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }
 
 export default App;

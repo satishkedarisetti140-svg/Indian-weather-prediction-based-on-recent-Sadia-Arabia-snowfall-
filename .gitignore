@@ -21,3 +21,6 @@ Thumbs.db
 
 # Secrets
 .env
+
+# Large Assets
+frontend/public/videos/
