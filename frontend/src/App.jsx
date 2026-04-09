@@ -111,11 +111,6 @@ function App() {
               <div className="temp-large">{summary.temperature}°C</div>
               <div className="condition-large">
                 {summary.condition}
-                {summary.prediction_source && (
-                  <span className="source-badge">
-                    {summary.prediction_source}
-                  </span>
-                )}
               </div>
             </div>
             <div className="weather-icon-large">
@@ -224,12 +219,6 @@ function App() {
                 <span style={{color: 'var(--text-secondary)'}}>RMSE</span>
                 <span style={{fontWeight: 'bold'}}>{modelInfo.rmse}</span>
               </div>
-              {weatherData?.summary?.prediction_source && (
-                <div style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.8rem', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '8px', marginTop: '1rem'}}>
-                  <span style={{color: 'var(--text-secondary)', fontSize: '0.9rem'}}>Active Source</span>
-                  <span style={{fontWeight: 'bold', color: 'var(--accent)', fontSize: '0.9rem'}}>{weatherData.summary.prediction_source}</span>
-                </div>
-              )}
             </div>
             
             <p style={{marginTop: '2rem', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5'}}>
