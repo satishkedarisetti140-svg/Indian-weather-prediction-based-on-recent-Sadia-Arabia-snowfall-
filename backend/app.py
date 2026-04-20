@@ -1,8 +1,5 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from flask import Flask, request, jsonify, send_file
+from flask_cors import CORS
 import joblib
 import pandas as pd
 import numpy as np
@@ -10,7 +7,6 @@ from datetime import datetime
 import os
 import math
 import requests
-from datetime import timedelta
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -18,29 +14,19 @@ load_dotenv()
 
 OPENWEATHER_API_KEY = os.getenv("OPENWEATHER_API_KEY", "OPENWEATHER_API_KEY_PLACEHOLDER")
 
-app = FastAPI(title="Indian Weather Predictor API")
+app = Flask(__name__)
+CORS(app)
 
-# Resolve paths relative to this script's directory
+# Resolve paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
 
-# Root route to serve the frontend
-@app.get("/", response_class=HTMLResponse)
-async def serve_frontend():
+@app.route("/", methods=["GET"])
+def serve_frontend():
     standalone_path = os.path.join(PROJECT_DIR, "standalone_weather_app.html")
     if os.path.exists(standalone_path):
-        with open(standalone_path, "r", encoding="utf-8") as f:
-            return f.read()
-    return "<h1>Frontend build not found. Please run npm build first.</h1>"
-
-# Setup CORS for Frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+        return send_file(standalone_path)
+    return "<h1>Frontend build not found. Please run npm build first.</h1>", 404
 
 # Load Models
 MODEL_PATH = os.path.join(BASE_DIR, "models/xgb_model.pkl")
@@ -58,7 +44,7 @@ else:
     scaler_y = None
     print("WARNING: Models not found. Please run ml_pipeline.py first.")
 
-# Load Saudi Arabia daily data for feature lookup
+# Load Saudi Arabia daily data
 SAUDI_DATA_PATH = os.path.join(PROJECT_DIR, "saudi_arabia_daily_climate_2015_2026 (1).xlsx")
 saudi_daily_df = None
 if os.path.exists(SAUDI_DATA_PATH):
@@ -111,16 +97,8 @@ if os.path.exists(INDIA_DATA_PATH):
     }).reset_index()
     print(f"India historical daily data loaded: {india_daily_df.shape[0]} DOY records")
 
-
-class PredictRequest(BaseModel):
-    state: str
-    district: str
-    date: str  # YYYY-MM-DD
-
-
 def kelvin_to_celsius(k):
     return k - 273.15
-
 
 def get_condition(temp_c, precip, humid, wind):
     """Classify weather condition based on predicted parameters with calibrated thresholds."""
@@ -134,7 +112,6 @@ def get_condition(temp_c, precip, humid, wind):
         return "Cloudy"
     else:
         return "Sunny"
-
 
 def get_weather_from_api(city, date_obj):
     """Fetch weather data from OpenWeather API if date is within 5 days."""
@@ -157,7 +134,6 @@ def get_weather_from_api(city, date_obj):
 
         # 2. Fetch Data
         if 0 <= diff_days <= 5:
-            # use 5 Day / 3 Hour Forecast
             forecast_url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
             resp = requests.get(forecast_url, timeout=5).json()
             
@@ -239,7 +215,7 @@ def get_weather_from_api(city, date_obj):
                     "hourly_forecast": hourly_data
                 }
         
-        # 3. Fallback to Current Weather for calibration factor
+        # 3. Fallback to Current Weather
         curr_url = f"http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
         curr_resp = requests.get(curr_url, timeout=5).json()
         return {
@@ -252,7 +228,6 @@ def get_weather_from_api(city, date_obj):
         print(f"API Error: {e}")
         return None
 
-
 def calculate_aqi(wind, humid, is_rainy):
     """Calculate Air Quality Index"""
     baseline = 120
@@ -263,11 +238,9 @@ def calculate_aqi(wind, humid, is_rainy):
         baseline -= 10
     return max(20, min(500, int(baseline)))
 
-
 def get_saudi_features_for_date(target_date):
     """Get Saudi Arabia climate features for a given date by finding the closest match."""
     if saudi_daily_df is None:
-        # Fallback hardcoded monthly averages
         month = target_date.month
         fallback = {
             1: {'air': 285.95, 'surface': 285.00, 'humid': 61.12, 'wind': 5.89, 'precip': 0.000001},
@@ -286,51 +259,43 @@ def get_saudi_features_for_date(target_date):
         base = fallback.get(month)
         return base['air'], base['surface'], base['humid'], base['wind'], base['precip']
 
-    # Find the same day-of-year from the most recent year available
     target_doy = target_date.timetuple().tm_yday
-    target_month = target_date.month
-
-    # Try to find exact day-of-year match from recent data
     matches = saudi_daily_df[saudi_daily_df['day_of_year'] == target_doy]
     if len(matches) > 0:
-        # Use the most recent year's data
         row = matches.iloc[-1]
     else:
-        # Fallback: find closest day_of_year
         closest_idx = (saudi_daily_df['day_of_year'] - target_doy).abs().idxmin()
         row = saudi_daily_df.loc[closest_idx]
 
     return (
-        float(row['saudi_air_temp']),
-        float(row['saudi_surface_temp']),
-        float(row['saudi_humidity']),
-        float(row['saudi_wind_speed']),
+        float(row['saudi_air_temp']), float(row['saudi_surface_temp']),
+        float(row['saudi_humidity']), float(row['saudi_wind_speed']),
         float(row['saudi_precipitation'])
     )
 
+@app.route("/api/predict", methods=["POST"])
+def predict_weather():
+    req = request.json
+    state = req.get('state')
+    district = req.get('district')
+    date_str = req.get('date')
 
-@app.post("/api/predict")
-def predict_weather(req: PredictRequest):
     if model is None:
-        return {"error": "Model not trained yet. Please run ml_pipeline.py first."}
+        return jsonify({"error": "Model not trained yet."}), 500
 
-    date_obj = datetime.strptime(req.date, "%Y-%m-%d")
+    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
     month = date_obj.month
     day_of_year = date_obj.timetuple().tm_yday
 
-    # Get Saudi features for this specific date
     saudi_air, saudi_surface, saudi_humid, saudi_wind, saudi_precip = get_saudi_features_for_date(date_obj)
 
-    # Cyclic features
     month_sin = math.sin(2 * math.pi * month / 12)
     month_cos = math.cos(2 * math.pi * month / 12)
     day_sin = math.sin(2 * math.pi * day_of_year / 365)
     day_cos = math.cos(2 * math.pi * day_of_year / 365)
 
-    # 1. API Calibration / Fetch
-    api_data = get_weather_from_api(req.district, date_obj)
+    api_data = get_weather_from_api(district, date_obj)
     
-    # 2. Calculate ML Prediction
     features = np.array([[
         saudi_air, saudi_surface, saudi_humid, saudi_wind, saudi_precip,
         month, day_of_year, month_sin, month_cos, day_sin, day_cos
@@ -345,31 +310,25 @@ def predict_weather(req: PredictRequest):
     avg_wind = float(pred[3])
     avg_temp_c = kelvin_to_celsius(avg_temp_k)
 
-    # 3. Apply API Logic
     source = "ML Model (Calibrated)"
     if api_data:
         if api_data.get("source") == "OpenWeather API (Forecast)":
-            # If forecast is available, prioritize it
             avg_temp_c = api_data['temp']
             avg_humid = api_data['humidity']
             avg_wind = api_data['wind']
             avg_precip = api_data['precip']
             source = "OpenWeather API"
         else:
-            # Use current API data as a bias towards the ML model
-            # e.g. adjust ML temp based on current delta
             api_curr_temp = api_data['temp']
-            # Simple bias: 30% API influence, 70% ML
             avg_temp_c = (avg_temp_c * 0.7) + (api_curr_temp * 0.3)
 
     if source != "OpenWeather API":
         # Add geographic variation ONLY heavily if it relies on ML models
-        geo_offset = (len(req.state) + len(req.district)) / 10 - 1.5
+        geo_offset = (len(state) + len(district)) / 10 - 1.5
         avg_temp_c += geo_offset
-        if month in [3, 4, 5, 6]: avg_temp_c += 4 # Summer
-        elif month in [11, 12, 1]: avg_temp_c -= 3 # Winter
+        if month in [3, 4, 5, 6]: avg_temp_c += 4 
+        elif month in [11, 12, 1]: avg_temp_c -= 3 
 
-    # Determine condition
     if source == "OpenWeather API":
         day_condition = api_data['condition']
     else:
@@ -393,9 +352,7 @@ def predict_weather(req: PredictRequest):
     
     aqi = calculate_aqi(avg_wind, avg_humid, day_condition in ["Rainy", "Thunderstorm"])
  
-    # Generate hourly breakdown
     hourly = []
-    
     if api_data and api_data.get("hourly_forecast"):
         hourly = api_data["hourly_forecast"]
     else:
@@ -404,10 +361,9 @@ def predict_weather(req: PredictRequest):
      
         for t, c in zip(times, temp_curve):
             h_temp = avg_temp_c + c
-            # Use rain in hourly only if precipitation is significantly high for that hour
             h_precip = avg_precip * (1.2 if c > 0 else 0.4)
             h_condition = day_condition
-            if h_precip > 5.0: # Moderate rain threshold
+            if h_precip > 5.0: 
                 h_condition = "Rainy"
             
             hourly.append({
@@ -417,10 +373,10 @@ def predict_weather(req: PredictRequest):
                 "precip": round(h_precip, 2)
             })
 
-    return {
+    return jsonify({
         "summary": {
-            "date": req.date,
-            "location": f"{req.district}, {req.state}",
+            "date": date_str,
+            "location": f"{district}, {state}",
             "condition": day_condition,
             "temperature": round(float(avg_temp_c), 1),
             "precipitation": round(float(min(100, avg_precip)), 1),
@@ -430,44 +386,35 @@ def predict_weather(req: PredictRequest):
             "prediction_source": source
         },
         "hourly": hourly
-    }
+    })
 
-
-@app.get("/api/model_info")
+@app.route("/api/model_info", methods=["GET"])
 def get_model_info():
-    return {
+    return jsonify({
         "accuracy": 96.32,
         "rmse": 6.25,
         "features": {
-            "saudi_air_temp": 0.12,
-            "saudi_surface_temp": 0.15,
-            "saudi_humidity": 0.08,
-            "saudi_wind_speed": 0.05,
-            "saudi_precipitation": 0.02,
-            "month": 0.20,
-            "day_of_year": 0.18,
-            "month_sin": 0.06,
-            "month_cos": 0.05,
-            "day_sin": 0.05,
+            "saudi_air_temp": 0.12,            "saudi_surface_temp": 0.15,
+            "saudi_humidity": 0.08,            "saudi_wind_speed": 0.05,
+            "saudi_precipitation": 0.02,       "month": 0.20,
+            "day_of_year": 0.18,               "month_sin": 0.06,
+            "month_cos": 0.05,                 "day_sin": 0.05,
             "day_cos": 0.04
         }
-    }
+    })
 
-
-@app.get("/api/seasonal_trends")
+@app.route("/api/seasonal_trends", methods=["GET"])
 def get_seasonal_trends():
-    """Return seasonal trend analysis data."""
     trends_path = os.path.join(BASE_DIR, "models/seasonal_trends.json")
     if os.path.exists(trends_path):
         import json
         with open(trends_path, "r") as f:
-            return json.load(f)
-    return {"error": "Seasonal trends not computed yet. Run ml_pipeline.py first."}
+            return jsonify(json.load(f))
+    return jsonify({"error": "Seasonal trends not computed yet. Run ml_pipeline.py first."}), 404
 
-
-@app.get("/api/locations")
+@app.route("/api/locations", methods=["GET"])
 def get_locations():
-    return {
+    return jsonify({
         "Andaman and Nicobar Islands": ["Nicobar", "North and Middle Andaman", "South Andaman"],
         "Andhra Pradesh": ["Anantapur", "Chittoor", "East Godavari", "Guntur", "Krishna", "Kurnool", "Prakasam", "Srikakulam", "Sri Potti Sriramulu Nellore", "Visakhapatnam", "Vizianagaram", "West Godavari", "YSR District, Kadapa (Cuddapah)"],
         "Arunachal Pradesh": ["Anjaw", "Changlang", "Dibang Valley", "East Kameng", "East Siang", "Kra Daadi", "Kurung Kumey", "Lohit", "Longding", "Lower Dibang Valley", "Lower Subansiri", "Namsai", "Papum Pare", "Siang", "Tawang", "Tirap", "Upper Siang", "Upper Subansiri", "West Kameng", "West Siang"],
@@ -504,9 +451,7 @@ def get_locations():
         "Uttar Pradesh": ["Agra", "Aligarh", "Ambedkar Nagar", "Amethi", "Amroha", "Auraiya", "Ayodhya", "Azamgarh", "Badaun", "Baghpat", "Bahraich", "Balia", "Balrampur", "Banda", "Barabanki", "Bareilly", "Basti", "Bhadohi", "Bijnor", "Bulandshahr", "Chandauli", "Chitrakoot", "Deoria", "Etah", "Etawah", "Farrukhabad", "Fatehpur", "Firozabad", "Gautam Buddha Nagar", "Ghaziabad", "Ghazipur", "Gonda", "Gorakhpur", "Hamirpur", "Hapur", "Hardoi", "Hathras", "Jalaun", "Jaunpur", "Jhansi", "Kannauj", "Kanpur Dehat", "Kanpur Nagar", "Kasganj", "Kaushambi", "Kheri", "Kushinagar", "Lalitpur", "Lucknow", "Maharajganj", "Mahoba", "Mainpuri", "Mathura", "Mau", "Meerut", "Mirzapur", "Moradabad", "Muzaffarnagar", "Pilibhit", "Pratapgarh", "Prayagraj", "Raebareli", "Rampur", "Saharanpur", "Sambhal", "Sant Kabir Nagar", "Shahjahanpur", "Shamli", "Shravasti", "Siddharthnagar", "Sitapur", "Sonbhadra", "Sultanpur", "Unnao", "Varanasi"],
         "Uttarakhand": ["Almora", "Bageshwar", "Chamoli", "Champawat", "Dehradun", "Haridwar", "Nainital", "Pauri Garhwal", "Pithoragarh", "Rudraprayag", "Tehri Garhwal", "Udham Singh Nagar", "Uttarkashi"],
         "West Bengal": ["Alipurduar", "Bankura", "Birbhum", "Cooch Behar", "Dakshin Dinajpur", "Darjeeling", "Hooghly", "Howrah", "Jalpaiguri", "Jhargram", "Kalimpong", "Kolkata", "Malda", "Murshidabad", "Nadia", "North 24 Parganas", "Paschim Bardhaman", "Paschim Medinipur", "Purba Bardhaman", "Purba Medinipur", "Purulia", "South 24 Parganas", "Uttar Dinajpur"]
-    }
-
+    })
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
+    app.run(host="0.0.0.0", port=8000, debug=True)

@@ -24,3 +24,5 @@ Thumbs.db
 
 # Large Assets
 frontend/public/videos/
+*.mp4
+standalone_weather_app.html

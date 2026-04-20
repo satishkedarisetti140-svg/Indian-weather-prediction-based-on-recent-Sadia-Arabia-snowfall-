@@ -24,21 +24,24 @@ ChartJS.register(
   Title, Tooltip, Legend, Filler
 );
 
-const API_URL = import.meta.env.PROD ? "/api" : "http://localhost:8001/api";
+const API_URL = import.meta.env.PROD ? "/api" : "http://127.0.0.1:8000/api";
 
 const WeatherBackground = ({ condition }) => {
   if (!condition) return <div className="weather-bg-layer" />;
   
   const cond = condition.toLowerCase();
-  const isSunny = cond.includes('sun') || cond.includes('clear');
-  const isRainy = cond.includes('rain') || cond.includes('thunder') || cond.includes('drizzle');
-  const isCloudy = cond.includes('cloud') || cond.includes('overcast');
+  
+  const isNight = cond.includes('night');
+  const isSunny = !isNight && (cond.includes('sun') || cond.includes('clear') || cond.includes('hot'));
+  const isRainy = cond.includes('rain') || cond.includes('thunder') || cond.includes('drizzle') || cond.includes('storm');
+  const isCloudy = cond.includes('cloud') || cond.includes('overcast') || cond.includes('mist') || cond.includes('haze');
 
   // Determine video source
   let videoSrc = "";
-  if (isSunny) videoSrc = "/videos/sunny.mp4";
-  else if (isRainy) videoSrc = "/videos/rainy.mp4";
-  else if (isCloudy) videoSrc = "/videos/cloudy.mp4";
+  if (isNight) videoSrc = ""; // Safely blank for night to allow dark CSS theme to shine
+  else if (isSunny) videoSrc = "/videos/sunny_v2.mp4";
+  else if (isRainy) videoSrc = "/videos/rainy_v2.mp4";
+  else if (isCloudy) videoSrc = "/videos/cloudy_v2.mp4";
 
   return (
     <div className="weather-bg-layer">
@@ -78,20 +81,6 @@ const WeatherBackground = ({ condition }) => {
                 }} 
               />
             ))}
-            {[...Array(15)].map((_, i) => (
-              <div 
-                key={`splash-${i}`} 
-                className="splash" 
-                style={{
-                  top: `${Math.random() * 100}vh`,
-                  left: `${Math.random() * 100}vw`,
-                  width: `${15 + Math.random() * 20}px`,
-                  height: `${15 + Math.random() * 20}px`,
-                  animationDelay: `${Math.random() * 8}s`,
-                  animationDuration: `${0.4 + Math.random() * 0.6}s`
-                }} 
-              />
-            ))}
           </div>
         )}
 
@@ -117,6 +106,25 @@ const WeatherBackground = ({ condition }) => {
       </div>
     </div>
   );
+};
+
+// Animated Emoji Component
+const AnimatedEmoji = ({ condition }) => {
+  if (!condition) return null;
+  const c = condition.toLowerCase();
+  
+  if (c.includes('sun') || c === 'clear sky') {
+    return <span className="animated-emoji emoji-sunny">☀️</span>;
+  } else if (c.includes('night') || c === 'clear') {
+    return <span className="animated-emoji emoji-night">🌙</span>;
+  } else if (c.includes('rain') || c.includes('thunder') || c.includes('drizzle') || c.includes('shower')) {
+    return <span className="animated-emoji emoji-rainy">⛈️</span>;
+  } else if (c.includes('cloud') || c.includes('overcast')) {
+    return <span className="animated-emoji emoji-cloudy">☁️</span>;
+  } else if (c.includes('snow')) {
+    return <span className="animated-emoji emoji-cloudy">❄️</span>;
+  }
+  return <span className="animated-emoji emoji-cloudy">🌤️</span>;
 };
 
 function App() {
@@ -181,13 +189,16 @@ function App() {
   };
 
   const getWeatherIcon = (condition, size = 24) => {
-    switch(condition) {
-      case 'Sunny': return <Sun size={size} color="#fcd34d" />;
-      case 'Cloudy': return <CloudSun size={size} color="#94a3b8" />;
-      case 'Rainy': return <CloudRain size={size} color="#60a5fa" />;
-      case 'Thunderstorm': return <CloudLightning size={size} color="#a78bfa" />;
-      default: return <Sun size={size} color="#fcd34d" />;
-    }
+    const cond = (condition || '').toLowerCase();
+    if (cond.includes('sun') || cond.includes('clear') || cond.includes('hot')) 
+      return <Sun size={size} color="#fcd34d" />;
+    if (cond.includes('rain') || cond.includes('drizzle') || cond.includes('storm')) 
+      return <CloudRain size={size} color="#60a5fa" />;
+    if (cond.includes('thunder') || cond.includes('lightning')) 
+      return <CloudLightning size={size} color="#a78bfa" />;
+    if (cond.includes('cloud') || cond.includes('overcast') || cond.includes('mist') || cond.includes('haze')) 
+      return <CloudSun size={size} color="#94a3b8" />;
+    return <Sun size={size} color="#fcd34d" />;
   };
 
   const renderForecastTab = () => {
@@ -206,9 +217,10 @@ function App() {
         <div className="glass-panel main-weather-panel">
           <div className="main-weather">
             <div>
-              <div className="temp-large">{summary.temperature}°C</div>
-              <div className="condition-large">
+              <div className="temp-large">{summary.temperature || summary.temp}°C</div>
+              <div className="condition-large" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 {summary.condition}
+                <AnimatedEmoji condition={summary.condition} />
               </div>
             </div>
             <div className="weather-icon-large">
@@ -240,16 +252,21 @@ function App() {
           </div>
 
           <div className="hourly-container">
-            <h3 className="hourly-title">Time-Based Daily Forecast</h3>
+            <h3 className="hourly-title">Time-Based Daily Forecast (Every 3 Hours)</h3>
             <div className="hourly-scroller">
-              {hourly.map((h, i) => (
-                <div key={i} className="hourly-card">
-                  <div className="hourly-time">{h.time}</div>
-                  <div style={{margin: '0.5rem 0'}}>
-                    {getWeatherIcon(h.condition, 32)}
-                  </div>
-                  <div className="hourly-temp">{h.temp}°C</div>
+              {hourly.map((hour, i) => (
+                <div key={i} className="hourly-card glass-panel">
+                <div className="time">{hour.time}</div>
+                <div className="temp">{hour.temp}°C</div>
+                <div className="hourly-condition">
+                  {hour.condition}
+                  <AnimatedEmoji condition={hour.condition} />
                 </div>
+                <div className="precip">
+                  <Droplets size={14} className="icon-accent" />
+                  {hour.precip}mm
+                </div>
+              </div>
               ))}
             </div>
           </div>
@@ -560,10 +577,26 @@ function App() {
           {activeTab === 'model' && renderModelTab()}
           {activeTab === 'seasonal' && renderSeasonalTab()}
         </div>
+        </div>
+        
+        {/* Profile Footer */}
+        <div style={{ textAlign: 'center', padding: '1.5rem', marginTop: '2rem', borderTop: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+          <p style={{ margin: '0 0 10px 0', fontSize: '0.95rem' }}>Developed with ❤️ by RAJU</p>
+          <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+            <a href="https://github.com/yourusername" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+              GitHub
+            </a>
+            <a href="https://linkedin.com/in/yourusername" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
+              LinkedIn
+            </a>
+          </div>
+        </div>
+
       </div>
     </div>
-  </div>
-);
+  );
 }
 
 export default App;
