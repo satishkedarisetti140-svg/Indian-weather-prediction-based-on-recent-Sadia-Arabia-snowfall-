@@ -43,7 +43,11 @@ async def serve_frontend():
 # Setup CORS for Frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins (Vercel + localhost)
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://indian-weather-prediction-based-on.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
