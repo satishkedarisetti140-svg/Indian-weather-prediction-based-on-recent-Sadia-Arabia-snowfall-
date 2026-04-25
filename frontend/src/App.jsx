@@ -32,9 +32,9 @@ const WeatherBackground = ({ condition }) => {
   const cond = condition.toLowerCase();
 
   const isNight = cond.includes('night');
-  const isSunny = !isNight && (cond.includes('sun') || cond.includes('clear') || cond.includes('hot'));
+  const isSunny = !isNight && (cond.includes('sun') || cond.includes('clear') || cond.includes('hot') || cond.includes('few clouds') || cond.includes('scattered clouds'));
   const isRainy = cond.includes('rain') || cond.includes('thunder') || cond.includes('drizzle') || cond.includes('storm');
-  const isCloudy = cond.includes('cloud') || cond.includes('overcast') || cond.includes('mist') || cond.includes('haze');
+  const isCloudy = !isSunny && (cond.includes('cloud') || cond.includes('overcast') || cond.includes('mist') || cond.includes('haze'));
 
   // Determine video source
   let videoSrc = "";
@@ -44,7 +44,7 @@ const WeatherBackground = ({ condition }) => {
   else if (isCloudy) videoSrc = "/videos/cloudy_v2.mp4";
 
   return (
-    <div className="weather-bg-layer">
+    <div className={`weather-bg-layer ${isSunny ? 'sunny-bg' : ''}`}>
       {videoSrc && (
         <video
           key={videoSrc}
@@ -52,7 +52,7 @@ const WeatherBackground = ({ condition }) => {
           loop
           muted
           playsInline
-          className="bg-video"
+          className={`bg-video ${isSunny ? 'sunny-video' : ''}`}
         >
           <source src={videoSrc} type="video/mp4" />
         </video>
@@ -113,10 +113,10 @@ const AnimatedEmoji = ({ condition }) => {
   if (!condition) return null;
   const c = condition.toLowerCase();
 
-  if (c.includes('sun') || c === 'clear sky') {
-    return <span className="animated-emoji emoji-sunny">☀️</span>;
-  } else if (c.includes('night') || c === 'clear') {
+  if (c === 'clear night' || c.includes('night')) {
     return <span className="animated-emoji emoji-night">🌙</span>;
+  } else if (c.includes('sun') || c.includes('clear') || c.includes('few clouds') || c.includes('scattered clouds')) {
+    return <span className="animated-emoji emoji-sunny">☀️</span>;
   } else if (c.includes('rain') || c.includes('thunder') || c.includes('drizzle') || c.includes('shower')) {
     return <span className="animated-emoji emoji-rainy">⛈️</span>;
   } else if (c.includes('cloud') || c.includes('overcast')) {
@@ -190,7 +190,9 @@ function App() {
 
   const getWeatherIcon = (condition, size = 24) => {
     const cond = (condition || '').toLowerCase();
-    if (cond.includes('sun') || cond.includes('clear') || cond.includes('hot'))
+    if (cond === 'clear night' || cond.includes('night'))
+      return <Moon size={size} color="#94a3b8" />;
+    if (cond.includes('sun') || cond.includes('clear') || cond.includes('hot') || cond.includes('few clouds') || cond.includes('scattered clouds'))
       return <Sun size={size} color="#fcd34d" />;
     if (cond.includes('rain') || cond.includes('drizzle') || cond.includes('storm'))
       return <CloudRain size={size} color="#60a5fa" />;
@@ -579,22 +581,160 @@ function App() {
           </div>
         </div>
 
-        {/* Profile Footer */}
-        <div style={{ textAlign: 'center', padding: '1.5rem', marginTop: '2rem', borderTop: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-          <p style={{ margin: '0 0 10px 0', fontSize: '0.95rem' }}>Developed with ❤️ by RAJU</p>
-          <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
-            <a href="https://github.com/yourusername" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" /></svg>
-              GitHub
-            </a>
-            <a href="https://linkedin.com/in/yourusername" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 'bold' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" /></svg>
-              LinkedIn
-            </a>
+        {/* End of app-container */}
+      </div>
+
+      <style>
+        {`
+          .footer-section {
+            position: relative;
+            margin-top: 5rem;
+            background: var(--glass-bg);
+            backdrop-filter: blur(30px) saturate(180%);
+            -webkit-backdrop-filter: blur(30px) saturate(180%);
+            border-top: 1px solid var(--glass-border);
+            padding: 4rem 5% 1.5rem;
+            z-index: 10;
+          }
+          .footer-wavy-top {
+            position: absolute;
+            top: -99px; left: 0; width: 100%; height: 100px;
+            display: block;
+            pointer-events: none;
+          }
+          .footer-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 3rem;
+            justify-content: space-between;
+            max-width: 1400px;
+            margin: 0 auto;
+          }
+          .footer-cols {
+            display: flex;
+            flex: 1;
+            flex-wrap: wrap;
+            gap: 3rem;
+            justify-content: space-between;
+            width: 100%;
+          }
+          .footer-col {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            min-width: 120px;
+          }
+          .footer-heading {
+            color: var(--text-primary);
+            margin: 0 0 0.5rem 0;
+            font-size: 1rem;
+            font-weight: 600;
+          }
+          .footer-link {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.3s ease;
+          }
+          .footer-link:hover {
+            color: var(--accent);
+          }
+          .footer-newsletter {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            min-width: 300px;
+          }
+          .footer-socials {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+          }
+          .social-icon {
+            color: var(--text-primary);
+            transition: color 0.3s, transform 0.3s;
+          }
+          .social-icon:hover {
+            color: var(--accent);
+            transform: translateY(-2px);
+          }
+          .footer-bottom {
+            max-width: 1400px;
+            margin: 3rem auto 0;
+            padding-top: 2rem;
+            border-top: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+          }
+        `}
+      </style>
+
+      <footer className="footer-section">
+        {/* Wavy top border matching Olipop */}
+        <svg className="footer-wavy-top" viewBox="0 0 1440 100" preserveAspectRatio="none">
+          <path fill="var(--glass-bg)" fillOpacity="1" d="M0,32L80,37.3C160,43,320,53,480,53.3C640,53,800,43,960,37.3C1120,32,1280,32,1360,32L1440,32L1440,100L1360,100C1280,100,1120,100,960,100C800,100,640,100,480,100C320,100,160,100,80,100L0,100Z" style={{ backdropFilter: 'blur(30px) saturate(180%)' }} />
+          <path stroke="var(--glass-border)" strokeWidth="1" fill="none" d="M0,32L80,37.3C160,43,320,53,480,53.3C640,53,800,43,960,37.3C1120,32,1280,32,1360,32L1440,32" />
+        </svg>
+
+        <div className="footer-grid">
+          <div className="footer-cols">
+            <div className="footer-col">
+              <h4 className="footer-heading">Predictor</h4>
+              <a href="#" className="footer-link">Current Weather</a>
+              <a href="#" className="footer-link">Hourly Forecast</a>
+              <a href="#" className="footer-link">5-Day Forecast</a>
+              <a href="#" className="footer-link">Interactive Map</a>
+              <a href="#" className="footer-link">Climate Trends</a>
+            </div>
+            <div className="footer-col">
+              <h4 className="footer-heading">Models</h4>
+              <a href="#" className="footer-link">XGBoost Details</a>
+              <a href="#" className="footer-link">Algorithm Stats</a>
+              <a href="#" className="footer-link">Data Sources</a>
+              <a href="#" className="footer-link">Performance Metrics</a>
+            </div>
+            <div className="footer-col">
+              <h4 className="footer-heading">About Us</h4>
+              <a href="https://github.com/rajukedarisetti/weather-predictor" target="_blank" rel="noopener noreferrer" className="footer-link" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" /></svg>
+                GitHub
+              </a>
+              <a href="https://www.linkedin.com/in/raju-kedarisetti-ba2696327?utm_source=share&utm_campaign=share_via&utm_content=profile&utm_medium=android_app" target="_blank" rel="noopener noreferrer" className="footer-link" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" /></svg>
+                LinkedIn
+              </a>
+              <a href="https://wa.me/919948712312" target="_blank" rel="noopener noreferrer" className="footer-link" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.299.045-.677.063-1.092-.069-.252-.08-.575-.187-.988-.365-1.739-.751-2.874-2.502-2.961-2.617-.087-.116-.708-.94-.708-1.793s.448-1.273.607-1.446c.159-.173.346-.217.462-.217l.332.006c.106.005.249-.04.39.298.144.347.491 1.2.534 1.287.043.087.072.188.014.304-.058.116-.087.188-.173.289l-.26.304c-.087.086-.177.18-.076.354.101.174.449.741.964 1.201.662.591 1.221.774 1.393.86s.274.072.376-.043c.101-.116.433-.506.549-.68.116-.173.231-.145.39-.087s1.011.477 1.184.564.289.13.332.202c.045.072.045.419-.1.824zm-3.423-14.416c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm.029 18.88c-1.161 0-2.305-.292-3.318-.844l-3.677.964.984-3.595c-.607-1.052-.927-2.246-.926-3.468.001-3.825 3.113-6.937 6.937-6.937 1.856.001 3.598.723 4.907 2.034 1.31 1.311 2.031 3.054 2.03 4.908-.001 3.825-3.113 6.938-6.937 6.938z" /></svg>
+                Contact
+              </a>
+            </div>
+            <div className="footer-col">
+              <h4 className="footer-heading">Legal</h4>
+              <a href="#" className="footer-link">Terms of Service</a>
+              <a href="#" className="footer-link">Privacy Policy</a>
+              <a href="#" className="footer-link">Cookie Policy</a>
+              <a href="#" className="footer-link">Licenses</a>
+            </div>
           </div>
+
+
         </div>
 
-      </div>
+        <div className="footer-bottom">
+          <div>&copy; {new Date().getFullYear()} Indian Weather Predictor. All Rights Reserved.</div>
+          <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+            <a href="#" className="footer-link">Terms of Service</a>
+            <a href="#" className="footer-link">Privacy Policy</a>
+            <a href="#" className="footer-link">Do Not Sell My Information</a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

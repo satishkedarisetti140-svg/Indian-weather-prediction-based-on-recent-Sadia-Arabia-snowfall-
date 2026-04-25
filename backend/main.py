@@ -139,6 +139,25 @@ def kelvin_to_celsius(k):
     return k - 273.15
 
 
+# Hours considered "night" for condition labelling
+NIGHT_HOURS = {0, 21, 22, 23}   # 9 PM, 10 PM, 11 PM, midnight
+
+
+def to_night_condition(condition: str) -> str:
+    """Convert a daytime condition to its night-time equivalent."""
+    c = condition.lower()
+    if 'rain' in c or 'drizzle' in c or 'shower' in c:
+        return condition   # rainy at night is still rainy
+    if 'thunder' in c or 'storm' in c:
+        return condition
+    if 'few clouds' in c or 'scattered clouds' in c:
+        return "Clear Night"
+    if 'cloud' in c or 'overcast' in c:
+        return condition   # cloudy night stays cloudy
+    # clear / sunny / few clouds → night label
+    return "Clear Night"
+
+
 def get_condition(temp_c, precip, humid, wind):
     """Classify weather condition based on predicted parameters with calibrated thresholds."""
     h = humid * 100 if humid <= 1 else humid
@@ -154,117 +173,133 @@ def get_condition(temp_c, precip, humid, wind):
 
 
 def get_weather_from_api(city, date_obj):
-    """Fetch weather data from OpenWeather API if date is within 5 days."""
+    """Fetch weather data locally from OpenWeather API using date strings."""
     try:
-        # 1. Geocoding
         geo_url = f"http://api.openweathermap.org/geo/1.0/direct?q={city},IN&limit=1&appid={OPENWEATHER_API_KEY}"
         geo_resp = requests.get(geo_url, timeout=5).json()
         if not geo_resp:
             return None
+            
         lat = geo_resp[0]['lat']
         lon = geo_resp[0]['lon']
 
-        today = datetime.now().date()
-        target = date_obj.date()
-        diff_days = (target - today).days
-
-        # Pre-fetch live weather for "Today" overrides
-        curr_url = f"http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
-        curr_resp = requests.get(curr_url, timeout=5).json()
-
-        # 2. Fetch Data
-        if 0 <= diff_days <= 5:
-            # use 5 Day / 3 Hour Forecast
-            forecast_url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
-            resp = requests.get(forecast_url, timeout=5).json()
-            
-            entries = resp.get('list', [])
-            if not entries:
-                return None
-                
-            best_match = min(entries, key=lambda x: abs((datetime.fromtimestamp(x['dt']) - date_obj).total_seconds()))
-            
-            hourly_data = []
-            # Exactly 8 parts representing 24 hours of the target day
-            base_date = datetime(date_obj.year, date_obj.month, date_obj.day)
-            for hour in [0, 3, 6, 9, 12, 15, 18, 21]:
-                target_dt = base_date.replace(hour=hour)
-                # Find closest corresponding API weather entry
-                closest_entry = min(entries, key=lambda x: abs((datetime.fromtimestamp(x['dt']) - target_dt).total_seconds()))
-                
-                diff_sec = abs((datetime.fromtimestamp(closest_entry['dt']) - target_dt).total_seconds())
-                
-                time_str = target_dt.strftime("%I %p").lstrip('0').replace('0 AM', '12 AM').replace('0 PM', '12 PM')
-                if hour == 0: time_str = "12 AM"
-                if hour == 12: time_str = "12 PM"
-                
-                if diff_sec > 14400: # More than 4 hours gap means API dropped this past slot
-                    curve_map = {0: -5, 3: -6, 6: -3, 9: 2, 12: 6, 15: 5, 18: 1, 21: -3}
-                    t_val = round(best_match['main']['temp'] + curve_map.get(hour, 0), 1)
-                    c_str = best_match['weather'][0]['description'].title()
-                    if c_str == "Clear Sky": 
-                        c_str = "Clear Night" if hour in [18, 21, 0, 3] else "Sunny"
-                    raw_main = best_match['weather'][0]['main']
-                    p_val = 0
-                else:
-                    t_val = round(closest_entry['main']['temp'], 1)
-                    c_str = closest_entry['weather'][0]['description'].title()
-                    if c_str == "Clear Sky": 
-                        c_str = "Clear Night" if hour in [18, 21, 0, 3] else "Sunny"
-                    raw_main = closest_entry['weather'][0]['main']
-                    p_val = round(closest_entry.get('rain', {}).get('3h', 0) / 3.0, 2)
-                
-                hourly_data.append({
-                    "time": time_str,
-                    "temp": t_val,
-                    "condition": c_str,
-                    "raw_main": raw_main,
-                    "precip": p_val
-                })
-
-            if diff_days == 0:
-                # User specifically requested the exact variables RIGHT NOW for today
-                final_temp = curr_resp['main']['temp']
-                final_cond = curr_resp['weather'][0]['description'].title()
-                if final_cond == "Clear Sky": 
-                    import datetime as dt_module
-                    ch = dt_module.datetime.now().hour
-                    final_cond = "Clear Night" if (ch >= 18 or ch <= 4) else "Sunny"
-                final_humid = curr_resp['main']['humidity'] / 100.0
-                final_wind = curr_resp['wind']['speed']
-                final_precip = curr_resp.get('rain', {}).get('1h', 0)
-            else:
-                final_temp = max([h['temp'] for h in hourly_data])
-                m_conds = [h['raw_main'].lower() for h in hourly_data]
-                if any('rain' in c or 'thunder' in c for c in m_conds):
-                    target_word = [h['condition'] for h in hourly_data if 'rain' in h['raw_main'].lower() or 'thunder' in h['raw_main'].lower()][0]
-                    final_cond = target_word
-                else:
-                    from collections import Counter
-                    final_cond = Counter([h['condition'] for h in hourly_data]).most_common(1)[0][0]
-                final_humid = best_match['main']['humidity'] / 100.0
-                final_wind = best_match['wind']['speed']
-                final_precip = round(sum([h['precip'] for h in hourly_data]), 2)
-
-            return {
-                    "temp": final_temp,
-                    "humidity": final_humid,
-                    "wind": final_wind,
-                    "precip": final_precip,
-                    "condition": final_cond,
-                    "source": "OpenWeather API (Forecast)",
-                    "hourly_forecast": hourly_data
-                }
+        target_date_str = date_obj.strftime("%Y-%m-%d")
+        today_date_str = datetime.now().strftime("%Y-%m-%d")
         
-        # 3. Fallback to Current Weather for calibration factor
+        # Pre-fetch live weather for exact precision on "today" 
         curr_url = f"http://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
         curr_resp = requests.get(curr_url, timeout=5).json()
-        return {
-            "temp": curr_resp['main']['temp'],
-            "humidity": curr_resp['main']['humidity'] / 100.0,
-            "condition": curr_resp['weather'][0]['main'],
-            "source": "OpenWeather API (Baseline)"
-        }
+
+        # Try to gather from 5-day forecast
+        forecast_url = f"http://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
+        f_resp = requests.get(forecast_url, timeout=5).json()
+        entries = f_resp.get('list', [])
+
+        # Filter strictly by target date string
+        day_entries = [x for x in entries if x.get('dt_txt', '').startswith(target_date_str)]
+
+        if day_entries:
+            # We found accurate forecast parts for that day!
+            final_temp = max([e['main']['temp_max'] for e in day_entries])
+            final_humid = sum([e['main']['humidity'] for e in day_entries]) / len(day_entries) / 100.0
+            final_wind = sum([e['wind']['speed'] for e in day_entries]) / len(day_entries)
+            final_precip = sum([e.get('rain', {}).get('3h', 0) for e in day_entries])
+            final_pop = max([e.get('pop', 0) for e in day_entries]) * 100.0
+            
+            # ── Condition resolving: prefer DAYTIME entries (9AM-6PM) for the summary ──
+            from collections import Counter
+            all_conds = [e['weather'][0]['description'].title() for e in day_entries]
+
+            # Daytime = hours 9, 12, 15 (3PM), 18 (6PM)
+            daytime_entries = [
+                e for e in day_entries
+                if datetime.strptime(e['dt_txt'], "%Y-%m-%d %H:%M:%S").hour in {9, 12, 15, 18}
+            ]
+            day_conds = [e['weather'][0]['description'].title() for e in daytime_entries] or all_conds
+
+            if any('Rain' in c or 'Thunder' in c for c in all_conds):
+                final_cond = next(c for c in all_conds if 'Rain' in c or 'Thunder' in c)
+            else:
+                # Use daytime-dominant condition for the summary
+                final_cond = Counter(day_conds).most_common(1)[0][0]
+                
+            # Night-hour slots: midnight (12 AM), 3 AM, and 9 PM should show night condition
+            NIGHT_DISPLAY_SLOTS = {"12 AM", "3 AM", "9 PM"}
+
+            # Create a dictionary of available API hourly data
+            api_hourly_dict = {}
+            for e in day_entries:
+                h_dt = datetime.strptime(e['dt_txt'], "%Y-%m-%d %H:%M:%S")
+                hour = h_dt.hour
+                raw_cond = e['weather'][0]['description'].title()
+
+                period = "AM"
+                display_hour = hour
+                if hour == 0:
+                    display_hour = 12
+                elif hour == 12:
+                    period = "PM"
+                elif hour > 12:
+                    display_hour = hour - 12
+                    period = "PM"
+                time_str = f"{display_hour} {period}"
+                
+                # Apply night conversion for night-time display slots
+                slot_cond = to_night_condition(raw_cond) if time_str in NIGHT_DISPLAY_SLOTS else raw_cond
+                
+                api_hourly_dict[time_str] = {
+                    "time": time_str,
+                    "temp": round(e['main']['temp'], 1),
+                    "condition": slot_cond,
+                    "precip": round(e.get('rain', {}).get('3h', 0), 2)
+                }
+
+            times = ["12 AM", "3 AM", "6 AM", "9 AM", "12 PM", "3 PM", "6 PM", "9 PM"]
+            temp_curve = [-5, -6, -3, +2, +6, +5, +1, -3]
+            hourly_data = []
+            
+            for t, c in zip(times, temp_curve):
+                if t in api_hourly_dict:
+                    hourly_data.append(api_hourly_dict[t])
+                else:
+                    # Fill missing slots with a realistic approximation
+                    avg_temp = final_temp - 3  # roughly average based on max temp
+                    h_temp = avg_temp + c
+                    h_precip = final_precip / 8.0 if final_precip > 0 else 0.0
+                    # For night slots that the API didn't cover, use night condition
+                    slot_cond = to_night_condition(final_cond) if t in NIGHT_DISPLAY_SLOTS else final_cond
+                    hourly_data.append({
+                        "time": t,
+                        "temp": round(h_temp, 1),
+                        "condition": slot_cond,
+                        "precip": round(h_precip, 2)
+                    })
+                
+            return {
+                "temp": final_temp,
+                "humidity": final_humid,
+                "wind": final_wind,
+                "precip": final_precip,
+                "pop": final_pop,
+                "condition": final_cond,
+                "source": "OpenWeather API (Forecast)",
+                "hourly_forecast": hourly_data
+            }
+            
+        elif target_date_str == today_date_str:
+            # If target is today but forecast is empty due to timezone lag it's safe to use current exactly
+            return {
+                "temp": curr_resp['main']['temp'],
+                "humidity": curr_resp['main']['humidity'] / 100.0,
+                "wind": curr_resp['wind']['speed'],
+                "precip": curr_resp.get('rain', {}).get('1h', 0),
+                "pop": 100.0 if curr_resp.get('rain') else 0.0,
+                "condition": curr_resp['weather'][0]['description'].title(),
+                "source": "OpenWeather API (Live)",
+                "hourly_forecast": []
+            }
+        else:
+            return None # Out of range for OpenWeather API -> Rely on ML fully!
     except Exception as e:
         print(f"API Error: {e}")
         return None
@@ -408,10 +443,22 @@ def predict_weather(req: PredictRequest):
         else:
             day_condition = get_condition(avg_temp_c, avg_precip, avg_humid, avg_wind)
     
+    # High Temperature Override: If it's extremely hot (>= 35°C), enforce Sunny condition for UI consistency
+    if avg_temp_c >= 35.0 and day_condition not in ["Rainy", "Thunderstorm"]:
+        day_condition = "Sunny"
+
     aqi = calculate_aqi(avg_wind, avg_humid, day_condition in ["Rainy", "Thunderstorm"])
  
+    # Calculate Probability of Precipitation (POP) for the % display
+    if api_data and 'pop' in api_data:
+        avg_pop = api_data['pop']
+    else:
+        # Heuristic: 5mm of rain -> 100% chance, 0mm -> 0%
+        avg_pop = min(100.0, avg_precip * 20.0)
+
     # Generate hourly breakdown
     hourly = []
+    NIGHT_DISPLAY_SLOTS = {"12 AM", "3 AM", "9 PM"}
     
     if api_data and api_data.get("hourly_forecast"):
         hourly = api_data["hourly_forecast"]
@@ -424,8 +471,11 @@ def predict_weather(req: PredictRequest):
             # Use rain in hourly only if precipitation is significantly high for that hour
             h_precip = avg_precip * (1.2 if c > 0 else 0.4)
             h_condition = day_condition
-            if h_precip > 5.0: # Moderate rain threshold
+            if h_precip > 5.0:  # Moderate rain threshold
                 h_condition = "Rainy"
+            # Convert sunny/clear to night label for night-time slots
+            if t in NIGHT_DISPLAY_SLOTS:
+                h_condition = to_night_condition(h_condition)
             
             hourly.append({
                 "time": t,
@@ -440,7 +490,7 @@ def predict_weather(req: PredictRequest):
             "location": f"{req.district}, {req.state}",
             "condition": day_condition,
             "temperature": round(float(avg_temp_c), 1),
-            "precipitation": round(float(min(100, avg_precip)), 1),
+            "precipitation": round(float(avg_pop), 1),
             "humidity": round(float(avg_humid * 100) if avg_humid < 1 else float(avg_humid), 1),
             "wind_speed": round(float(avg_wind * 3.6), 1),
             "aqi": int(aqi),

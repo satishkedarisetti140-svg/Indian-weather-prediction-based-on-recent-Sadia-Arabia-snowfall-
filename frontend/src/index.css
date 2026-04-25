@@ -576,4 +576,12 @@ input:focus, select:focus {
   background: var(--text-secondary);
 }
 
+/* Sunny condition overrides to ensure video is visible and bright */
+.weather-bg-layer.sunny-bg {
+  background: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+}
 
+.bg-video.sunny-video {
+  opacity: 0.75;
+  mix-blend-mode: screen;
+}
